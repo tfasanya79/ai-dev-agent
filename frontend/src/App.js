@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import './App.css';
+import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import 'highlight.js/styles/github.css'; // or any other theme
 
 function App() {
   const [input, setInput] = useState('');
@@ -39,7 +42,9 @@ function App() {
       </form>
       <div className="response">
         <h2>Response:</h2>
-        <p>{response}</p>
+      <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+      {response}
+      </ReactMarkdown>
       </div>
     </div>
   );
