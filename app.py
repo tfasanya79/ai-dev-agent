@@ -1,15 +1,22 @@
 from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 from utils.token_tracker import TokenCounter
 from langchain_agents.chat_agent import get_ai_response
 from dotenv import load_dotenv
 import os
 import traceback
 
-# ✅ Load environment variables from .env
 load_dotenv()
 
 app = Flask(__name__)
+# Replace '*' with your frontend URL in production for security!
+CORS(app, resources={r"/*": {"origins": os.getenv("FRONTEND_URL", "*")}})
+
 token_counter = TokenCounter()
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"})
 
 @app.route('/')
 def index():
@@ -21,19 +28,11 @@ def chat():
         user_message = request.json.get('message')
         print(f"User message received: {user_message}")
 
-        # Create the message history
         message_history = [{"role": "user", "content": user_message}]
-        print(f"Message history: {message_history}")
-
-        # Count input tokens
         tokens_used = token_counter.add_tokens(message_history)
         print(f"Tokens used (input): {tokens_used}, Total tokens: {token_counter.total_tokens}")
 
-        # Get AI response
         ai_response = get_ai_response(user_message)
-        print(f"AI Response: {ai_response}")
-
-        # Count output tokens
         tokens_used = token_counter.add_tokens([{"role": "assistant", "content": ai_response}])
         print(f"Tokens used (output): {tokens_used}, Total tokens: {token_counter.total_tokens}")
 
@@ -41,7 +40,6 @@ def chat():
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
-        import traceback
         traceback.print_exc()
         return jsonify({'response': "Something went wrong..."}), 500
 
@@ -52,6 +50,6 @@ def reset_chat():
     token_counter.reset()
     return jsonify({'status': 'chat history cleared'})
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
