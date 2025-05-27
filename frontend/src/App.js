@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import './App.css';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github.css'; // or any other theme
+import 'highlight.js/styles/github.css';
 
 function App() {
   const [input, setInput] = useState('');
@@ -10,7 +10,6 @@ function App() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
       const res = await fetch('https://ai-dev-agent-backend.onrender.com/chat', {
         method: 'POST',
@@ -28,6 +27,38 @@ function App() {
     }
   };
 
+  // Custom CodeBlock component
+  const CodeBlock = ({ children }) => {
+    const code = children[0];
+    const handleCopy = () => {
+      navigator.clipboard.writeText(code);
+    };
+
+    return (
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={handleCopy}
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            padding: '4px 8px',
+            fontSize: '12px',
+            cursor: 'pointer',
+            backgroundColor: '#f0f0f0',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+          }}
+        >
+          Copy
+        </button>
+        <pre>
+          <code>{code}</code>
+        </pre>
+      </div>
+    );
+  };
+
   return (
     <div className="App">
       <h1>AI Dev Agent Interface</h1>
@@ -40,11 +71,16 @@ function App() {
         />
         <button type="submit">Send</button>
       </form>
-      <div className="response">
+      <div className="response" style={{ maxHeight: '400px', overflowY: 'auto' }}>
         <h2>Response:</h2>
-      <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
-      {response}
-      </ReactMarkdown>
+        <ReactMarkdown
+          rehypePlugins={[rehypeHighlight]}
+          components={{
+            code: CodeBlock,
+          }}
+        >
+          {response}
+        </ReactMarkdown>
       </div>
     </div>
   );
