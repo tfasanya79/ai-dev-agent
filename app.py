@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
 from utils.token_tracker import TokenCounter
 from langchain_agents.chat_agent import get_ai_response
 from dotenv import load_dotenv
@@ -9,7 +10,15 @@ import traceback
 load_dotenv()
 
 app = Flask(__name__)
+
+# Allow CORS for frontend URL (customizable via .env)
+CORS(app, resources={r"/*": {"origins": os.getenv("FRONTEND_URL", "*")}})
+
 token_counter = TokenCounter()
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok"})
 
 @app.route('/')
 def index():
@@ -41,7 +50,6 @@ def chat():
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
-        import traceback
         traceback.print_exc()
         return jsonify({'response': "Something went wrong..."}), 500
 
@@ -52,6 +60,6 @@ def reset_chat():
     token_counter.reset()
     return jsonify({'status': 'chat history cleared'})
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
