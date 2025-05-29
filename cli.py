@@ -1,13 +1,8 @@
-import os
 import ast
-from dotenv import load_dotenv
 from agents.coordinator import CoordinatorAgent
-from agents.code_generator import CodeGeneratorAgent  # Use class not function
+from agents.code_generator import CodeGeneratorAgent
 
-load_dotenv()
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-
-if __name__ == "__main__":
+def main():
     mode = input("Select mode [coordinator/spec]: ").strip().lower()
     if mode == "coordinator":
         agent = CoordinatorAgent()
@@ -25,8 +20,11 @@ if __name__ == "__main__":
 
         try:
             spec = ast.literal_eval(spec_input)
-            codegen = CodeGeneratorAgent(chat_model=None)  # pass proper chat model later
+            codegen = CodeGeneratorAgent(chat_model=None)  # Update with actual model if needed
             print(codegen.generate_code_from_spec(spec))
         except Exception as e:
             print("❌ Failed to parse the spec. Make sure it's a valid Python dict.")
             print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()
