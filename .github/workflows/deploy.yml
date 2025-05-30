@@ -23,11 +23,13 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: |
           cd frontend
           npm install
-          cd ..
+
+      - name: Install backend dependencies
+        run: |
           pip install -r requirements.txt
 
       - name: Build frontend
