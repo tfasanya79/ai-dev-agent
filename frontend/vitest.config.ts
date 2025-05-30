@@ -1,11 +1,30 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import NodeGlobalsPolyfillPlugin from '@esbuild-plugins/node-globals-polyfill';
+import rollupNodePolyFill from 'rollup-plugin-node-polyfills';
 
 export default defineConfig({
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: './src/setupTests.ts',
-    // you can include test match patterns if needed:
-    include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
+  plugins: [react()],
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+      plugins: [
+        NodeGlobalsPolyfillPlugin({
+          buffer: true,
+        }),
+      ],
+    },
   },
-})
+  build: {
+    rollupOptions: {
+      plugins: [
+        rollupNodePolyFill(),
+      ],
+    },
+  },
+  define: {
+    'process.env': {},
+  },
+});
