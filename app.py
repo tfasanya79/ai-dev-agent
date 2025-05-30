@@ -1,149 +1,97 @@
 import os
-import json
-from fastapi import FastAPI, UploadFile, File, HTTPException
+import ast
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from fastapi import File, UploadFile, Form
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional
+from langchain_community.chat_models import ChatOpenAI
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 
-# Import your agents
 from agents.coordinator import CoordinatorAgent
-from agents.design_agent import DesignAgent  # You'll need to create this
 from agents.code_generator import CodeGeneratorAgent
-from agents.git_agent import GitAgent  # You'll need to create this
-#from agents.deployment_agent import DeploymentAgent  # You'll need to create this
+from agents.design_agent import DesignAgent
+from agents.git_agent import GitAgent
 
+load_dotenv()
 app = FastAPI()
+
+class PromptRequest(BaseModel):
+    message: str
+
+class ProjectMetadata(BaseModel):
+    name: str
+    url: str = None
+    description: str
 
 @app.get("/")
 def read_root():
-    return {"message": "🚀 Welcome to AI Dev Agent! Use /docs to explore the API."}
+    return {"message": "Welcome to the AI Dev Agent API"}
 
+@app.post("/chat")
+async def chat_endpoint(request: PromptRequest):
+    prompt = request.message.strip()
+    llm = ChatOpenAI(model_name="gpt-4", temperature=0.7)
 
+    if prompt.lower().startswith("code:"):
+        task = prompt[5:].strip()
+        template = PromptTemplate.from_template("Write code for: {task}")
+    elif prompt.lower().startswith("bug:"):
+        task = prompt[4:].strip()
+        template = PromptTemplate.from_template("Fix the following bug: {task}")
+    elif prompt.lower().startswith("test:"):
+        task = prompt[5:].strip()
+        template = PromptTemplate.from_template("Write tests for: {task}")
+    elif prompt.lower().startswith("explain:"):
+        task = prompt[8:].strip()
+        template = PromptTemplate.from_template("Explain the following code: {task}")
+    elif prompt.lower().startswith("refactor:"):
+        task = prompt[9:].strip()
+        template = PromptTemplate.from_template("Refactor the following code: {task}")
+    else:
+        task = prompt
+        template = PromptTemplate.from_template("{task}")
 
-# In-memory user session store (replace with DB or cache later)
-user_sessions = {}
+    chain = LLMChain(llm=llm, prompt=template)
+    result = chain.run(task=task)
+    return {"response": result}
 
-# ===== Models =====
-class ProjectStartRequest(BaseModel):
-    repo_name: str
-    repo_url: str
-    description: str
-
-class DesignConfirmationRequest(BaseModel):
-    confirmed: bool
-
-class FeedbackRequest(BaseModel):
-    feedback: str
-
-# ===== Endpoint: Start Project =====
-@app.post("/start")
-async def start_project(req: ProjectStartRequest):
-    project_id = req.repo_name.lower().replace(" ", "_")
-    if project_id in user_sessions:
-        raise HTTPException(status_code=400, detail="Project with this repo name already exists.")
-
-    # Initialize Coordinator Agent and get initial design proposal
-    coordinator = CoordinatorAgent()
-    design_proposal = coordinator.propose_design(req.description)  # Implement this method in CoordinatorAgent
-
-    # Save session data
-    user_sessions[project_id] = {
-        "repo_url": req.repo_url,
-        "description": req.description,
-        "design_proposal": design_proposal,
-        "final_design": None,
-        "status": "design_proposed",
-    }
-
-    return {
-        "project_id": project_id,
-        "design_proposal": design_proposal,
-        "message": "Design proposed. Please confirm or upload your final design."
-    }
-
-# ===== Endpoint: Confirm or Upload Design =====
-@app.post("/design/{project_id}")
-async def design_confirmation(project_id: str, confirmed: Optional[bool] = None, file: Optional[UploadFile] = File(None)):
-    if project_id not in user_sessions:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    if confirmed:
-        # User accepts the proposed design
-        user_sessions[project_id]["final_design"] = user_sessions[project_id]["design_proposal"]
-        user_sessions[project_id]["status"] = "design_confirmed"
-        return {"message": "Design confirmed. Ready to build."}
-
-    if file:
+@app.post("/upload-design")
+async def upload_design(project_name: str = Form(...), file: UploadFile = File(...)):
+    try:
         content = await file.read()
-        try:
-            design = json.loads(content.decode())
-            user_sessions[project_id]["final_design"] = design
-            user_sessions[project_id]["status"] = "design_uploaded"
-            return {"message": "Custom design uploaded successfully."}
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid design file: {str(e)}")
+        decoded = content.decode("utf-8")
 
-    raise HTTPException(status_code=400, detail="You must confirm the design or upload a design file.")
+        # Save design in the appropriate project directory
+        project_path = os.path.join(os.getcwd(), project_name)
+        os.makedirs(project_path, exist_ok=True)
+        design_path = os.path.join(project_path, "uploaded_design.md")
+        with open(design_path, "w") as f:
+            f.write(decoded)
 
-# ===== Endpoint: Build & Deploy =====
-@app.post("/build/{project_id}")
-async def build_project(project_id: str):
-    if project_id not in user_sessions:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    session = user_sessions[project_id]
-    if session["status"] not in ["design_confirmed", "design_uploaded"]:
-        raise HTTPException(status_code=400, detail="Design not confirmed or uploaded yet.")
-
-    # Instantiate agents
-    codegen = CodeGeneratorAgent()
-    git_agent = GitAgent()
-    deploy_agent = DeploymentAgent()
-
-    # Generate codebase from final design/spec
-    spec = session["final_design"]
-    try:
-        codebase_path = codegen.generate_code_from_spec(spec)
+        print(f"📥 Uploaded design saved to {design_path}")
+        return JSONResponse(content={"message": "Custom design uploaded and saved."})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Code generation failed: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
-    # Setup git repo, commit, and push
-    try:
-        git_agent.initialize_repo(session["repo_url"], codebase_path)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Git operation failed: {str(e)}")
 
-    # Deploy MVP and get URL
-    try:
-        mvp_url = deploy_agent.deploy(codebase_path)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Deployment failed: {str(e)}")
+@app.post("/design")
+def generate_design(metadata: ProjectMetadata):
+    design_agent = DesignAgent()
+    design = design_agent.generate_system_design(
+        project_name=metadata.name,
+        project_description=metadata.description
+    )
+    return {"system_design": design}
 
-    session["status"] = "built_and_deployed"
-    session["mvp_url"] = mvp_url
+@app.post("/start-project")
+def start_project(metadata: ProjectMetadata):
+    git_agent = GitAgent(chat=None)
+    path = git_agent.init_repo(metadata.name)
+    os.system(f"code {path}")
+    return {"message": f"Project '{metadata.name}' initialized and VS Code opened."}
 
-    return {
-        "message": "Project built and deployed successfully.",
-        "mvp_url": mvp_url,
-    }
-
-# ===== Endpoint: Receive Feedback & Iterate =====
-@app.post("/feedback/{project_id}")
-async def receive_feedback(project_id: str, feedback_req: FeedbackRequest):
-    if project_id not in user_sessions:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    session = user_sessions[project_id]
-    if session["status"] != "built_and_deployed":
-        raise HTTPException(status_code=400, detail="Project not deployed yet.")
-
-    # Process feedback: create issues, update code, retest, redeploy
-    # You may want to create an IterationAgent or extend existing ones
-
-    # For now, simulate acknowledgment
-    return {
-        "message": "Feedback received and processing started.",
-        "feedback": feedback_req.feedback,
-    }
 
 if __name__ == "__main__":
     import uvicorn
