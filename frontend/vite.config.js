@@ -3,13 +3,13 @@ import react from '@vitejs/plugin-react';
 import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
 import { NodeModulesPolyfillPlugin } from '@esbuild-plugins/node-modules-polyfill';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig({
   plugins: [
     react(),
     nodePolyfills({
-      // Specific polyfills you need
-      include: ['fs', 'path', 'process', 'stream', 'crypto'],
+      include: ['crypto', 'stream', 'util', 'buffer', 'process'],
       globals: {
         Buffer: true,
         global: true,
@@ -17,11 +17,14 @@ export default defineConfig({
       },
       protocolImports: true,
     }),
+    visualizer()
   ],
   resolve: {
     alias: {
-      stream: 'stream-browserify',
       crypto: 'crypto-browserify',
+      stream: 'stream-browserify',
+      util: 'util',
+      buffer: 'buffer',
     },
   },
   define: {
@@ -42,4 +45,9 @@ export default defineConfig({
       ],
     },
   },
+  build: {
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
+  }
 });
